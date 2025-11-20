@@ -1,0 +1,21 @@
+app:
+  port: 8080
+  log_level: debug
+
+database:
+  driver: postgres
+  host: db
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: pr_reviewer
+  max_open_conns: 10
+  max_idle_conns: 5
+  conn_max_lifetime: 5m
+
+pr:
+  max_reviewers: 2
+  assign_only_active_users: true
+
+migrations:
+  dir: /migrations
