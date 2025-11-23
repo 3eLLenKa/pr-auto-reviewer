@@ -16,7 +16,6 @@ Thumbs.db
 
 # Secrets
 .env
-.env.*
 
 # Node
 node_modules/
