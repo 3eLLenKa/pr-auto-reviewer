@@ -1,21 +1,9 @@
-version: "3.9"
+version: '3.9'
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    container_name: pr-reviewer-app
-    ports:
-      - "${APP_PORT}:8080"
-    depends_on:
-      - db
-    command: ["./pr-reviewer"]
-    restart: unless-stopped
-  
   db:
     image: postgres:15
-    container_name: pr-reviewer-db
+    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -23,26 +11,50 @@ services:
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   migrator:
     build:
-      context: backend-admin-panel/goose
-    volumes:
-      - ./migrations:/migrations
+      context: ./goose
+      dockerfile: Dockerfile
     depends_on:
       db:
         condition: service_healthy
-    restart: on-failure
+    volumes:
+      - ./migrations:/migrations   # <-- путь к твоим миграциям на хосте
+    working_dir: /migrations
     environment:
       GOOSE_DRIVER: postgres
-      GOOSE_DBSTRING: postgres://postgres:postgres@db:5432/pr_reviewer?sslmode=disable
-    working_dir: /migrations
-    command: up
-    healthcheck:
-      test: ["CMD-SHELL", "exit 0"]
+      GOOSE_DBSTRING: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable
+      MIGRATIONS_DIR: /migrations
+    command: ["up"]
+    restart: on-failure
 
-  
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    environment:
+      APP_PORT: ${APP_PORT}
+      CONFIG_PATH: ${CONFIG_PATH}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      SSL_MODE: ${SSL_MODE}
+    restart: always
+
 volumes:
-  pgdata:
+  db_data:
