@@ -26,7 +26,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./migrations:/migrations   # <-- путь к твоим миграциям на хосте
+      - ./migrations:/migrations
     working_dir: /migrations
     environment:
       GOOSE_DRIVER: postgres
@@ -34,7 +34,6 @@ services:
       MIGRATIONS_DIR: /migrations
     command: ["up"]
     restart: on-failure
-
 
   app:
     build:

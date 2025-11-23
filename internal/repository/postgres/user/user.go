@@ -3,14 +3,9 @@ package pg_user
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"fmt"
 
 	"github.com/3eLLenKa/test-avito/internal/domain"
-)
-
-var (
-	ErrUserNotFound  = errors.New("user not found")
-	ErrNoAssignedPRs = errors.New("no PRs assigned to this user")
 )
 
 type UserRepo struct {
@@ -49,4 +44,64 @@ func (r *UserRepo) SetUserActive(ctx context.Context, userId string, isActive bo
 	}
 
 	return user, nil
+}
+
+func (r *UserRepo) DeactivateByTeam(ctx context.Context, teamName string) ([]string, error) {
+	query := `
+        UPDATE users 
+        SET is_active = FALSE 
+        WHERE team_name = $1 AND is_active = TRUE
+        RETURNING user_id;
+    `
+
+	rows, err := r.db.QueryContext(ctx, query, teamName)
+	if err != nil {
+		return nil, fmt.Errorf("error executing bulk deactivation query for team %s: %w", teamName, err)
+	}
+	defer rows.Close()
+
+	deactivatedIDs := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("error scanning deactivated user ID for team %s: %w", teamName, err)
+		}
+		deactivatedIDs = append(deactivatedIDs, userID)
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("rows iteration error after scanning: %w", rows.Err())
+	}
+
+	return deactivatedIDs, nil
+}
+
+func (r *UserRepo) ListActiveMembersByTeam(ctx context.Context, teamName string, excludeUserID string) ([]domain.User, error) {
+	query := `
+        SELECT user_id, username, team_name, is_active
+        FROM users
+        WHERE team_name = $1 
+          AND is_active = TRUE 
+          AND user_id != $2;
+    `
+	rows, err := r.db.QueryContext(ctx, query, teamName, excludeUserID)
+	if err != nil {
+		return nil, fmt.Errorf("error executing ListActiveMembersByTeam query for team %s: %w", teamName, err)
+	}
+	defer rows.Close()
+
+	members := make([]domain.User, 0)
+	for rows.Next() {
+		var u domain.User
+		if err := rows.Scan(&u.ID, &u.Name, &u.TeamName, &u.IsActive); err != nil {
+			return nil, fmt.Errorf("error scanning active user row for team %s: %w", teamName, err)
+		}
+		members = append(members, u)
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("rows iteration error in ListActiveMembersByTeam: %w", rows.Err())
+	}
+
+	return members, nil
 }

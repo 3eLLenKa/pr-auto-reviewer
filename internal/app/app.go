@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/3eLLenKa/test-avito/internal/config"
 	api "github.com/3eLLenKa/test-avito/internal/delivery/http/gen"
@@ -17,7 +18,7 @@ type App struct {
 	Server *server.Server
 }
 
-func NewApp(cfg *config.Config) *App {
+func NewApp(log *slog.Logger, cfg *config.Config) *App {
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s dbname=%s password=%s sslmode=%s",
 		cfg.Database.Host,
@@ -34,7 +35,7 @@ func NewApp(cfg *config.Config) *App {
 	}
 
 	repo := repository.New(pg.Db)
-	svc := service.New(repo.PullRequest, repo.Team, repo.User)
+	svc := service.New(log, repo.PullRequest, repo.Team, repo.User)
 
 	handler := api.NewStrictHandler(
 		handlers.NewHandlers(svc),

@@ -199,6 +199,66 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /team/deactivateUsers:
+    post:
+      tags: [Teams]
+      summary: Массово деактивировать пользователей команды
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [team_name]
+              properties:
+                team_name:
+                  type: string
+            example:
+              team_name: backend
+      responses:
+        '200':
+          description: Деактивация выполнена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [team_name, deactivated, reassigned_count]
+                properties:
+                  team_name:
+                    type: string
+                  deactivated:
+                    type: array
+                    items:
+                      type: string
+                    description: user_id деактивированных пользователей
+                  reassigned_count:
+                    type: integer
+                    description: Количество успешно переназначенных PR
+                  failed_count:
+                    type: integer
+                    description: Количество PR без доступных активных ревьюверов
+                  updated_prs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PullRequest'
+          example:
+            team_name: backend
+            deactivated: [ "u2", "u3" ]
+            reassigned_count: 5
+            failed_count: 1
+            updated_prs:
+              - pull_request_id: pr-1001
+                pull_request_name: Add search
+                author_id: u1
+                status: OPEN
+                assigned_reviewers: ["u5", "u6"]
+        '404':
+          description: Команда не найдена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+
   /users/setIsActive:
     post:
       tags: [Users]
@@ -419,3 +479,49 @@ paths:
                     pull_request_name: Add search
                     author_id: u1
                     status: OPEN
+
+  /stats:
+    get:
+      tags: [Users, PullRequests]
+      summary: Получить статистику назначений по пользователям и PR
+      responses:
+        '200':
+          description: Объект статистики
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  by_user:
+                    type: array
+                    description: Количество назначений ревьюверов по каждому пользователю
+                    items:
+                      type: object
+                      required: [user_id, assignments_count]
+                      properties:
+                        user_id:
+                          type: string
+                        assignments_count:
+                          type: integer
+                  by_pr:
+                    type: array
+                    description: Количество назначений для каждого PR
+                    items:
+                      type: object
+                      required: [pull_request_id, reviewers_count]
+                      properties:
+                        pull_request_id:
+                          type: string
+                        reviewers_count:
+                          type: integer
+              example:
+                by_user:
+                  - user_id: u1
+                    assignments_count: 3
+                  - user_id: u2
+                    assignments_count: 5
+                by_pr:
+                  - pull_request_id: pr-1001
+                    reviewers_count: 2
+                  - pull_request_id: pr-1002
+                    reviewers_count: 1

@@ -15,7 +15,11 @@ import (
 func main() {
 	cfg := config.MustLoad()
 
-	application := app.NewApp(cfg)
+	log := slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	)
+
+	application := app.NewApp(log, cfg)
 
 	go func() {
 		application.Server.Run()

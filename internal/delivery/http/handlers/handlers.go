@@ -17,6 +17,8 @@ type Service interface {
 	TeamGet(ctx context.Context, teamName string) (*domain.Team, error)
 	UsersGetReview(ctx context.Context, userId string) ([]*domain.PullRequest, error)
 	SetUserActive(ctx context.Context, userId string, isActive bool) (*domain.User, error)
+	TeamDeactivateUsers(ctx context.Context, teamName string) ([]string, []*domain.PullRequest, int, int, error)
+	GetAssignmentStats(ctx context.Context) ([]domain.AssignmentCountByUser, []domain.AssignmentCountByPR, error)
 }
 
 type Handlers struct {
@@ -214,6 +216,47 @@ func (h *Handlers) GetTeamGet(ctx context.Context, request api.GetTeamGetRequest
 	}, nil
 }
 
+// package handlers
+
+func (h *Handlers) PostTeamDeactivateUsers(
+	ctx context.Context,
+	request api.PostTeamDeactivateUsersRequestObject,
+) (api.PostTeamDeactivateUsersResponseObject, error) {
+	teamName := request.Body.TeamName
+
+	deactivatedIDs, updatedPRsDomain, reassignedCount, failedCount, err := h.svc.TeamDeactivateUsers(ctx, teamName)
+
+	if err != nil {
+		if errors.Is(err, domain.ErrTeamNotFound) {
+			return api.PostTeamDeactivateUsers404JSONResponse(
+				errorResponse(api.ErrorResponseErrorCodeNOTFOUND, fmt.Sprintf("team '%s' not found", teamName)),
+			), nil
+		}
+		return nil, fmt.Errorf("cannot deactivate team users: %w", err)
+	}
+
+	updatedPRs := []api.PullRequest{}
+	for _, pr := range updatedPRsDomain {
+		updatedPRs = append(updatedPRs, api.PullRequest{
+			PullRequestId:     pr.PullRequestId,
+			PullRequestName:   pr.PullRequestName,
+			AuthorId:          pr.AuthorId,
+			AssignedReviewers: pr.AssignedReviewers,
+			MergedAt:          pr.MergedAt,
+			CreatedAt:         pr.CreatedAt,
+			Status:            api.PullRequestStatus(pr.Status),
+		})
+	}
+
+	return api.PostTeamDeactivateUsers200JSONResponse{
+		TeamName:        teamName,
+		Deactivated:     deactivatedIDs,
+		ReassignedCount: reassignedCount,
+		FailedCount:     &failedCount,
+		UpdatedPrs:      &updatedPRs,
+	}, nil
+}
+
 func (h *Handlers) GetUsersGetReview(
 	ctx context.Context,
 	request api.GetUsersGetReviewRequestObject,
@@ -237,6 +280,51 @@ func (h *Handlers) GetUsersGetReview(
 	return api.GetUsersGetReview200JSONResponse{
 		UserId:       request.Params.UserId,
 		PullRequests: resp,
+	}, nil
+}
+
+func (h *Handlers) GetStats(
+	ctx context.Context,
+	request api.GetStatsRequestObject,
+) (api.GetStatsResponseObject, error) {
+	byUserDomain, byPRDomain, err := h.svc.GetAssignmentStats(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get assignment stats: %w", err)
+	}
+
+	apiByUser := make([]struct {
+		AssignmentsCount int    `json:"assignments_count"`
+		UserId           string `json:"user_id"`
+	}, len(byUserDomain))
+
+	for i, item := range byUserDomain {
+		apiByUser[i] = struct {
+			AssignmentsCount int    `json:"assignments_count"`
+			UserId           string `json:"user_id"`
+		}{
+			AssignmentsCount: item.AssignmentsCount,
+			UserId:           item.UserID,
+		}
+	}
+
+	apiByPR := make([]struct {
+		PullRequestId  string `json:"pull_request_id"`
+		ReviewersCount int    `json:"reviewers_count"`
+	}, len(byPRDomain))
+
+	for i, pr := range byPRDomain {
+		apiByPR[i] = struct {
+			PullRequestId  string `json:"pull_request_id"`
+			ReviewersCount int    `json:"reviewers_count"`
+		}{
+			PullRequestId:  pr.PullRequestID,
+			ReviewersCount: pr.ReviewersCount,
+		}
+	}
+
+	return api.GetStats200JSONResponse{
+		ByUser: &apiByUser,
+		ByPr:   &apiByPR,
 	}, nil
 }
 

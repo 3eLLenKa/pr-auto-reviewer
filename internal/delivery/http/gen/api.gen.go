@@ -119,6 +119,11 @@ type PostPullRequestReassignJSONBody struct {
 	PullRequestId string `json:"pull_request_id"`
 }
 
+// PostTeamDeactivateUsersJSONBody defines parameters for PostTeamDeactivateUsers.
+type PostTeamDeactivateUsersJSONBody struct {
+	TeamName string `json:"team_name"`
+}
+
 // GetTeamGetParams defines parameters for GetTeamGet.
 type GetTeamGetParams struct {
 	// TeamName Уникальное имя команды
@@ -149,6 +154,9 @@ type PostPullRequestReassignJSONRequestBody PostPullRequestReassignJSONBody
 // PostTeamAddJSONRequestBody defines body for PostTeamAdd for application/json ContentType.
 type PostTeamAddJSONRequestBody = Team
 
+// PostTeamDeactivateUsersJSONRequestBody defines body for PostTeamDeactivateUsers for application/json ContentType.
+type PostTeamDeactivateUsersJSONRequestBody PostTeamDeactivateUsersJSONBody
+
 // PostUsersSetIsActiveJSONRequestBody defines body for PostUsersSetIsActive for application/json ContentType.
 type PostUsersSetIsActiveJSONRequestBody PostUsersSetIsActiveJSONBody
 
@@ -163,9 +171,15 @@ type ServerInterface interface {
 	// Переназначить конкретного ревьювера на другого из его команды
 	// (POST /pullRequest/reassign)
 	PostPullRequestReassign(c *gin.Context)
+	// Получить статистику назначений по пользователям и PR
+	// (GET /stats)
+	GetStats(c *gin.Context)
 	// Создать команду с участниками (создаёт/обновляет пользователей)
 	// (POST /team/add)
 	PostTeamAdd(c *gin.Context)
+	// Массово деактивировать пользователей команды
+	// (POST /team/deactivateUsers)
+	PostTeamDeactivateUsers(c *gin.Context)
 	// Получить команду с участниками
 	// (GET /team/get)
 	GetTeamGet(c *gin.Context, params GetTeamGetParams)
@@ -225,6 +239,19 @@ func (siw *ServerInterfaceWrapper) PostPullRequestReassign(c *gin.Context) {
 	siw.Handler.PostPullRequestReassign(c)
 }
 
+// GetStats operation middleware
+func (siw *ServerInterfaceWrapper) GetStats(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetStats(c)
+}
+
 // PostTeamAdd operation middleware
 func (siw *ServerInterfaceWrapper) PostTeamAdd(c *gin.Context) {
 
@@ -236,6 +263,19 @@ func (siw *ServerInterfaceWrapper) PostTeamAdd(c *gin.Context) {
 	}
 
 	siw.Handler.PostTeamAdd(c)
+}
+
+// PostTeamDeactivateUsers operation middleware
+func (siw *ServerInterfaceWrapper) PostTeamDeactivateUsers(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostTeamDeactivateUsers(c)
 }
 
 // GetTeamGet operation middleware
@@ -347,7 +387,9 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/pullRequest/create", wrapper.PostPullRequestCreate)
 	router.POST(options.BaseURL+"/pullRequest/merge", wrapper.PostPullRequestMerge)
 	router.POST(options.BaseURL+"/pullRequest/reassign", wrapper.PostPullRequestReassign)
+	router.GET(options.BaseURL+"/stats", wrapper.GetStats)
 	router.POST(options.BaseURL+"/team/add", wrapper.PostTeamAdd)
+	router.POST(options.BaseURL+"/team/deactivateUsers", wrapper.PostTeamDeactivateUsers)
 	router.GET(options.BaseURL+"/team/get", wrapper.GetTeamGet)
 	router.GET(options.BaseURL+"/users/getReview", wrapper.GetUsersGetReview)
 	router.POST(options.BaseURL+"/users/setIsActive", wrapper.PostUsersSetIsActive)
@@ -458,6 +500,34 @@ func (response PostPullRequestReassign409JSONResponse) VisitPostPullRequestReass
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetStatsRequestObject struct {
+}
+
+type GetStatsResponseObject interface {
+	VisitGetStatsResponse(w http.ResponseWriter) error
+}
+
+type GetStats200JSONResponse struct {
+	// ByPr Количество назначений для каждого PR
+	ByPr *[]struct {
+		PullRequestId  string `json:"pull_request_id"`
+		ReviewersCount int    `json:"reviewers_count"`
+	} `json:"by_pr,omitempty"`
+
+	// ByUser Количество назначений ревьюверов по каждому пользователю
+	ByUser *[]struct {
+		AssignmentsCount int    `json:"assignments_count"`
+		UserId           string `json:"user_id"`
+	} `json:"by_user,omitempty"`
+}
+
+func (response GetStats200JSONResponse) VisitGetStatsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type PostTeamAddRequestObject struct {
 	Body *PostTeamAddJSONRequestBody
 }
@@ -482,6 +552,43 @@ type PostTeamAdd400JSONResponse ErrorResponse
 func (response PostTeamAdd400JSONResponse) VisitPostTeamAddResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PostTeamDeactivateUsersRequestObject struct {
+	Body *PostTeamDeactivateUsersJSONRequestBody
+}
+
+type PostTeamDeactivateUsersResponseObject interface {
+	VisitPostTeamDeactivateUsersResponse(w http.ResponseWriter) error
+}
+
+type PostTeamDeactivateUsers200JSONResponse struct {
+	// Deactivated user_id деактивированных пользователей
+	Deactivated []string `json:"deactivated"`
+
+	// FailedCount Количество PR без доступных активных ревьюверов
+	FailedCount *int `json:"failed_count,omitempty"`
+
+	// ReassignedCount Количество успешно переназначенных PR
+	ReassignedCount int            `json:"reassigned_count"`
+	TeamName        string         `json:"team_name"`
+	UpdatedPrs      *[]PullRequest `json:"updated_prs,omitempty"`
+}
+
+func (response PostTeamDeactivateUsers200JSONResponse) VisitPostTeamDeactivateUsersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PostTeamDeactivateUsers404JSONResponse ErrorResponse
+
+func (response PostTeamDeactivateUsers404JSONResponse) VisitPostTeamDeactivateUsersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -571,9 +678,15 @@ type StrictServerInterface interface {
 	// Переназначить конкретного ревьювера на другого из его команды
 	// (POST /pullRequest/reassign)
 	PostPullRequestReassign(ctx context.Context, request PostPullRequestReassignRequestObject) (PostPullRequestReassignResponseObject, error)
+	// Получить статистику назначений по пользователям и PR
+	// (GET /stats)
+	GetStats(ctx context.Context, request GetStatsRequestObject) (GetStatsResponseObject, error)
 	// Создать команду с участниками (создаёт/обновляет пользователей)
 	// (POST /team/add)
 	PostTeamAdd(ctx context.Context, request PostTeamAddRequestObject) (PostTeamAddResponseObject, error)
+	// Массово деактивировать пользователей команды
+	// (POST /team/deactivateUsers)
+	PostTeamDeactivateUsers(ctx context.Context, request PostTeamDeactivateUsersRequestObject) (PostTeamDeactivateUsersResponseObject, error)
 	// Получить команду с участниками
 	// (GET /team/get)
 	GetTeamGet(ctx context.Context, request GetTeamGetRequestObject) (GetTeamGetResponseObject, error)
@@ -696,6 +809,31 @@ func (sh *strictHandler) PostPullRequestReassign(ctx *gin.Context) {
 	}
 }
 
+// GetStats operation middleware
+func (sh *strictHandler) GetStats(ctx *gin.Context) {
+	var request GetStatsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStats(ctx, request.(GetStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStats")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		ctx.Error(err)
+		ctx.Status(http.StatusInternalServerError)
+	} else if validResponse, ok := response.(GetStatsResponseObject); ok {
+		if err := validResponse.VisitGetStatsResponse(ctx.Writer); err != nil {
+			ctx.Error(err)
+		}
+	} else if response != nil {
+		ctx.Error(fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // PostTeamAdd operation middleware
 func (sh *strictHandler) PostTeamAdd(ctx *gin.Context) {
 	var request PostTeamAddRequestObject
@@ -722,6 +860,39 @@ func (sh *strictHandler) PostTeamAdd(ctx *gin.Context) {
 		ctx.Status(http.StatusInternalServerError)
 	} else if validResponse, ok := response.(PostTeamAddResponseObject); ok {
 		if err := validResponse.VisitPostTeamAddResponse(ctx.Writer); err != nil {
+			ctx.Error(err)
+		}
+	} else if response != nil {
+		ctx.Error(fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostTeamDeactivateUsers operation middleware
+func (sh *strictHandler) PostTeamDeactivateUsers(ctx *gin.Context) {
+	var request PostTeamDeactivateUsersRequestObject
+
+	var body PostTeamDeactivateUsersJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		ctx.Status(http.StatusBadRequest)
+		ctx.Error(err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PostTeamDeactivateUsers(ctx, request.(PostTeamDeactivateUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostTeamDeactivateUsers")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		ctx.Error(err)
+		ctx.Status(http.StatusInternalServerError)
+	} else if validResponse, ok := response.(PostTeamDeactivateUsersResponseObject); ok {
+		if err := validResponse.VisitPostTeamDeactivateUsersResponse(ctx.Writer); err != nil {
 			ctx.Error(err)
 		}
 	} else if response != nil {

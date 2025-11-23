@@ -25,3 +25,13 @@ type PullRequest struct {
 	CreatedAt         *time.Time
 	MergedAt          *time.Time
 }
+
+type AssignmentCountByUser struct {
+	UserID           string
+	AssignmentsCount int
+}
+
+type AssignmentCountByPR struct {
+	PullRequestID  string
+	ReviewersCount int
+}
