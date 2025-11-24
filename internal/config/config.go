@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -16,46 +17,50 @@ type Config struct {
 }
 
 type App struct {
-	Port     string `env:"APP_PORT" yaml:"port" env-default:"8080"`
-	LogLevel string `env:"LOG_LEVEL" yaml:"log_level" env-default:"info"`
+	Port     string `yaml:"port"`
+	LogLevel string `yaml:"log_level"`
 }
 
 type Database struct {
-	Driver          string        `env:"DB_DRIVER" yaml:"driver" env-default:"postgres"`
-	Host            string        `env:"POSTGRES_HOST" yaml:"host" env-default:"localhost"`
-	Port            string        `env:"POSTGRES_PORT" yaml:"port" env-default:"5432"`
-	User            string        `env:"POSTGRES_USER" yaml:"user"`
-	Password        string        `env:"POSTGRES_PASSWORD" yaml:"password"`
-	DBName          string        `env:"POSTGRES_DB" yaml:"dbname"`
-	MaxOpenConns    int           `env:"DB_MAX_OPEN_CONNS" yaml:"max_open_conns" env-default:"10"`
-	MaxIdleConns    int           `env:"DB_MAX_IDLE_CONNS" yaml:"max_idle_conns" env-default:"5"`
-	ConnMaxLifetime time.Duration `env:"DB_CONN_MAX_LIFETIME" yaml:"conn_max_lifetime" env-default:"5m"`
+	Driver          string        `yaml:"driver"`
+	Host            string        `yaml:"host"`
+	Port            string        `yaml:"port"`
+	User            string        `yaml:"user"`
+	Password        string        `yaml:"password"`
+	DBName          string        `yaml:"dbname"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
 	SSLMode         string        `env:"SSL_MODE" yaml:"ssl_mode" env-default:"disable"`
 }
 
 type PR struct {
-	MaxReviewers     int  `env:"PR_MAX_REVIEWERS" yaml:"max_reviewers" env-default:"2"`
-	AssignOnlyActive bool `env:"PR_ASSIGN_ONLY_ACTIVE" yaml:"assign_only_active_users" env-default:"true"`
+	MaxReviewers     int  `yaml:"max_reviewers"`
+	AssignOnlyActive bool `yaml:"assign_only_active_users"`
 }
 
 type Migrations struct {
-	Dir string `env:"MIGRATIONS_DIR" yaml:"dir" env-default:"/migrations"`
+	Dir string `yaml:"dir"`
 }
 
 func MustLoad() *Config {
-	cfg := &Config{}
-	path := os.Getenv("CONFIG_PATH")
-
-	if path == "" {
-		panic("config path is empty")
+	if _, err := os.Stat(".env"); err == nil {
+		_ = godotenv.Load(".env")
 	}
 
-	if err := cleanenv.ReadConfig(path, cfg); err != nil {
-		log.Fatalf("failed to read config: %v", err)
+	cfg := &Config{}
+
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "internal/config/config.yaml"
+	}
+
+	if err := cleanenv.ReadConfig(configPath, cfg); err != nil {
+		log.Fatalf("failed to read config file: %v", err)
 	}
 
 	if err := cleanenv.ReadEnv(cfg); err != nil {
-		log.Fatalf("failed to read env variables: %v", err)
+		log.Printf("failed to read env overrides: %v", err)
 	}
 
 	return cfg

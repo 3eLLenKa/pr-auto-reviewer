@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/3eLLenKa/test-avito/internal/domain"
+	"github.com/lib/pq"
 )
 
 type PRRepo struct {
@@ -60,10 +61,11 @@ func (r *PRRepo) scanPRsWithReviewers(ctx context.Context, rowsPRs *sql.Rows) ([
         WHERE pull_request_id = ANY($1)
     `
 
-	rowsReviewers, err := r.db.QueryContext(ctx, queryReviewers, prIDs)
+	rowsReviewers, err := r.db.QueryContext(ctx, queryReviewers, pq.Array(prIDs))
 	if err != nil {
 		return nil, fmt.Errorf("error executing reviewers query: %w", err)
 	}
+
 	defer rowsReviewers.Close()
 
 	for rowsReviewers.Next() {
@@ -252,14 +254,20 @@ func (r *PRRepo) ListOpenPRsByReviewers(ctx context.Context, deactivatedUserIDs 
             pr.created_at, 
             pr.merged_at
         FROM pull_requests pr
-        WHERE pr.status = $2 -- Предполагается, что 'OPEN' это domain.PRStatusOpen
+        WHERE pr.status = $2
           AND EXISTS (
-              SELECT 1 FROM pull_request_reviewers prr
+              SELECT 1 
+              FROM pull_request_reviewers prr
               WHERE prr.pull_request_id = pr.pull_request_id
-                AND prr.reviewer_id = ANY($1) 
+                AND prr.reviewer_id = ANY($1)
           )
     `
-	rows, err := r.db.QueryContext(ctx, queryPRs, deactivatedUserIDs, domain.PRStatusOpen)
+	rows, err := r.db.QueryContext(
+		ctx,
+		queryPRs,
+		pq.Array(deactivatedUserIDs),
+		domain.PRStatusOpen,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error executing ListOpenPRsByReviewers query: %w", err)
 	}

@@ -4,10 +4,6 @@ services:
   db:
     image: postgres:15
     restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
@@ -44,15 +40,6 @@ services:
         condition: service_completed_successfully
     ports:
       - "${APP_PORT}:${APP_PORT}"
-    environment:
-      APP_PORT: ${APP_PORT}
-      CONFIG_PATH: ${CONFIG_PATH}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      SSL_MODE: ${SSL_MODE}
     restart: always
 
 volumes:
