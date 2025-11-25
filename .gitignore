@@ -14,9 +14,6 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Secrets
-.env
-
 # Node
 node_modules/
 
