@@ -10,10 +10,6 @@
 .DS_Store?
 Thumbs.db
 
-# Secrets
-.env
-.env.*
-
 # IDE
 .vscode/
 .idea/

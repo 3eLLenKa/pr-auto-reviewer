@@ -17,30 +17,30 @@ type Config struct {
 }
 
 type App struct {
-	Port     string `yaml:"port"`
-	LogLevel string `yaml:"log_level"`
+	Port     string `yaml:"port" env:"APP_PORT"`
+	LogLevel string `yaml:"log_level" env:"APP_LOG_LEVEL" env-default:"debug"`
 }
 
 type Database struct {
-	Driver          string        `yaml:"driver"`
-	Host            string        `yaml:"host"`
-	Port            string        `yaml:"port"`
-	User            string        `yaml:"user"`
-	Password        string        `yaml:"password"`
-	DBName          string        `yaml:"dbname"`
-	MaxOpenConns    int           `yaml:"max_open_conns"`
-	MaxIdleConns    int           `yaml:"max_idle_conns"`
-	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
-	SSLMode         string        `env:"SSL_MODE" yaml:"ssl_mode" env-default:"disable"`
+	Driver          string        `yaml:"driver" env:"POSTGRES_DRIVER" env-default:"postgres"`
+	Host            string        `yaml:"host" env:"POSTGRES_HOST"`
+	Port            string        `yaml:"port" env:"POSTGRES_PORT"`
+	User            string        `yaml:"user" env:"POSTGRES_USER"`
+	Password        string        `yaml:"password" env:"POSTGRES_PASSWORD"`
+	DBName          string        `yaml:"dbname" env:"POSTGRES_DB"`
+	MaxOpenConns    int           `yaml:"max_open_conns" env:"DB_MAX_OPEN_CONNS" env-default:"10"`
+	MaxIdleConns    int           `yaml:"max_idle_conns" env:"DB_MAX_IDLE_CONNS" env-default:"5"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime" env:"DB_CONN_MAX_LIFETIME" env-default:"30m"`
+	SSLMode         string        `yaml:"ssl_mode" env:"SSL_MODE" env-default:"disable"`
 }
 
 type PR struct {
-	MaxReviewers     int  `yaml:"max_reviewers"`
-	AssignOnlyActive bool `yaml:"assign_only_active_users"`
+	MaxReviewers     int  `yaml:"max_reviewers" env:"PR_MAX_REVIEWERS" env-default:"2"`
+	AssignOnlyActive bool `yaml:"assign_only_active_users" env:"PR_ASSIGN_ONLY_ACTIVE" env-default:"true"`
 }
 
 type Migrations struct {
-	Dir string `yaml:"dir"`
+	Dir string `yaml:"dir" env:"MIGRATIONS_DIR"`
 }
 
 func MustLoad() *Config {
@@ -52,7 +52,7 @@ func MustLoad() *Config {
 
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "internal/config/config.yaml"
+		configPath = "config/config.yaml"
 	}
 
 	if err := cleanenv.ReadConfig(configPath, cfg); err != nil {
